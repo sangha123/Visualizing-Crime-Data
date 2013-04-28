@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<title>CrimeStatistics</title>
+<style>
+
+@import url(my.css);
+
+#chart {
+  margin-left: -40px;
+  height: 506px;
+}
+
+text {
+  font: 10px sans-serif;
+}
+
+.dot {
+  stroke: #000;
+}
+
+.axis path, .axis line {
+  fill: none;
+  stroke: #000;
+  shape-rendering: crispEdges;
+}
+
+.label {
+  fill: #777;
+}
+
+.month.label {
+  font: 500 196px "Helvetica Neue";
+  fill: #ddd;
+}
+
+.month.label.active {
+  fill: #aaa;
+}
+
+.overlay {
+  fill: none;
+  pointer-events: all;
+  cursor: ew-resize;
+}
+
+</style>
+
+<header>
+  <a href="../" rel="author">Sanghamitra Deb</a>
+</header>
+<h2>Crime patterns in different neighborhoods for 2012</h2>
+
+<p id="chart"></p>
+
+<p> This chart graph represents the evolution of crime in SanFrancisco in 2012. The <b>(<i>x</i>)-axis</b> represents the number of <b>Burglaries</b>, the <b>(<i>y</i>)-axis</b> represents the <b>Total</b> number of crimes, the <FONT COLOR="#FF0000">Colors</FONT> represent different <FONT COLOR="#FF0000">Neighborhoods</FONT> and the <FONT COLOR="#FF00FF">slider </FONT>represents <FONT COLOR="#FF00FF">12 months</FONT> of the year starting at 0. The <FONT COLOR="#0000FF">Radius</FONT> of the circles represents the number of <FONT COLOR="#0000FF">Arson</FONT> in each neighborhood. The smallest circles indicate that there has been no arson in that particular neighborhood. If you hover your mouse over each circle you will see the name of the neigborhood. Inorder to see the same pattern for <a href="http://127.0.0.1:8000/d3testNewAssault.html">Assault</a>, <a href="http://127.0.0.1:8000/d3testNewDrug.html">Drug/Narcotics</a> and <a href="http://127.0.0.1:8000/d3testNewDrunk.html">Drunken Behavior</a>. 
+</p>
+
+
+<script src="http://d3js.org/d3.v2.js?2.8.1"></script>
+<script>
+
+// Various accessors that specify the four dimensions of data to visualize.
+function x(d) { return d.Total; }
+function y(d) { return d.NumCrime; }
+function radius(d) { return d.Total; }
+function color(d) { return d.name; }
+function key(d) { return d.name; }
+
+// Chart dimensions.
+var margin = {top: 19.5, right: 19.5, bottom: 19.5, left: 39.5},
+    width = 960 - margin.right,
+    height = 500 - margin.top - margin.bottom;
+
+// Various scales. These domains make assumptions of data, naturally.
+var xScale = d3.scale.linear().domain([0, 60]).range([0, width]),
+    yScale = d3.scale.linear().domain([0, 600]).range([height, 0]),
+    radiusScale = d3.scale.sqrt().domain([0, 50]).range([0, 40]),
+    colorScale = d3.scale.category20();
+
+// The x & y axes.
+var xAxis = d3.svg.axis().orient("bottom").scale(xScale).ticks(11, d3.format(",d")),
+    yAxis = d3.svg.axis().scale(yScale).orient("left");
+
+// Create the SVG container and set the origin.
+var svg = d3.select("#chart").append("svg")
+    .attr("width", width + margin.left + margin.right)
+    .attr("height", height + margin.top + margin.bottom)
+  .append("g")
+    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+// Add the x-axis.
+svg.append("g")
+    .attr("class", "x axis")
+    .attr("transform", "translate(0," + height + ")")
+    .call(xAxis);
+
+// Add the y-axis.
+svg.append("g")
+    .attr("class", "y axis")
+    .call(yAxis);
+
+// Add an x-axis label.
+svg.append("text")
+    .attr("class", "x label")
+    .attr("text-anchor", "end")
+    .attr("x", width)
+    .attr("y", height - 6)
+    .text("Total number Burglaries for every neighborhood");
+
+// Add a y-axis label.
+svg.append("text")
+    .attr("class", "y label")
+    .attr("text-anchor", "end")
+    .attr("y", 6)
+    .attr("dy", ".75em")
+    .attr("transform", "rotate(-90)")
+    .text("Total Number of crimes for every neighborhood");
+
+// Add the month label; the value is set on transition.
+var label = svg.append("text")
+    .attr("class", "month label")
+    .attr("text-anchor", "end")
+    .attr("y", height - 24)
+    .attr("x", width)
+    .text(11);
+
+// Load the data.
+d3.json("crimed2D.json", function(d) {
+  
+  
+  //console.log(d[0].name,d[0].indexBurglary[0,1][1],d[0].Arson)
+
+  var dot = svg.append("g")
+      .attr("class", "dots")
+    .selectAll(".dot")
+    .data(interpolateData(1))
+    .enter().append("circle")
+      .attr("class", "dot")
+      .style("fill", function(d) { return colorScale(color(d)); })
+      .call(position);    
+
+     dot.append("title")
+      .text(function(d) { return d.name.replace(/_/g, " "); });
+ 
+     
+      var box = label.node().getBBox();
+
+  var overlay = svg.append("rect")
+        .attr("class", "overlay")
+        .attr("x", box.x)
+        .attr("y", box.y)
+        .attr("width", box.width)
+        .attr("height", box.height)
+        .on("mouseover", enableInteraction);
+
+  // Start a transition that interpolates the data based on year.
+  svg.transition()
+      .duration(10000)
+      .ease("linear")
+      .tween("month", tweenYear)
+      .each("end", enableInteraction);
+
+  function position(dot) {
+    dot.attr("cx", function(d) { 
+        return xScale(d.NumCrime);
+        })
+        .attr("cy", function(d) { 
+          return yScale(d.Total);
+        })
+        .attr("r", function(d) { 
+          //console.log(d.total);
+          return (d.radius*10+5.0); 
+        });
+  }
+
+  // Defines a sort order so that the smallest dots are drawn on top.
+  /*function order(a, b) {
+    return radius(b) - radius(a);
+  }*/
+
+  // After the transition finishes, you can mouseover to change the year.
+   function enableInteraction() {
+     var yearScale = d3.scale.linear()
+         .domain([0, 11])
+         .range([box.x + 1, box.x + box.width - 1])
+         .clamp(true);
+
+  //   // Cancel the current transition, if any.
+     svg.transition().duration(0);
+
+     overlay
+         .on("mouseover", mouseover)
+         .on("mouseout", mouseout)
+         .on("mousemove", mousemove)
+         .on("touchmove", mousemove);
+
+
+ function mouseover() {
+       label.classed("active", true);
+     }
+
+     function mouseout() {
+       label.classed("active", false);
+     }
+
+     function mousemove() {
+       displayYear(yearScale.invert(d3.mouse(this)[0]));
+     }
+  }
+  
+  // Tweens the entire chart by first tweening the month, and then the data.
+  // For the interpolated data, the dots and label are redrawn.
+  function tweenYear(month) {
+    var month = d3.interpolateNumber(0, 11);
+    //var month = [0,1,2,3,4,5,6,7,8,9,10,11];
+    
+    return function(t) {
+
+      displayYear(month(t)); };
+  }
+
+  // Updates the display to show the specified month.
+  function displayYear(month) {
+    
+    dot.data(interpolateData(Math.round(month)), key).call(position);
+    label.text(Math.round(month));
+  }
+
+    function interpolateData(month) {
+      
+    return d.map(function(d) {
+     
+        return {
+          name: d.name,
+          radius:d.ARSON[0,month][1],
+          color:d.color,
+          Month: d.indexBURGLARY[0],
+          NumCrime:d.indexBURGLARY[0,month][1],
+          Total:d.total};        
+      //};
+    });
+     //console.log(d.index[1])
+  }
+  
+
+  /*function interpolateValues(values, year) {
+    var i = bisect.left(values, year, 0, values.length - 1),
+        a = values[i];
+    if (i > 0) {
+      var b = values[i - 1],
+          t = (year - a[0]) / (b[0] - a[0]);
+      return a[1] * (1 - t) + b[1] * t;
+    }
+   return a[1];
+  } */
+
+
+});
+
+</script>
